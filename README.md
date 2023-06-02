@@ -8,7 +8,7 @@ local font = 'DermaLarge'
 local char = 'a'
 local visH, emptySpace = surface.GetVisualCharacterHeight( char, font )
 
-hook.Add( 'HUDPaint', 'Comparision', function()
+hook.Add( 'HUDPaint', '', function()
 
 	surface.SetFont( font )
 	local w, h = surface.GetTextSize( char )
