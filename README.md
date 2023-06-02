@@ -1,8 +1,8 @@
 # glua-VisualCharacterHeight
 Finds visual height of a character(-s). May be very helpful when positioning text by height. Does not handle newlines.
 
-## Comparision between `surface.GetTextSize` and `surface.GetVisualCharacterHeight`
-![image](https://github.com/noaccessl/glua-VisualCharacterHeight/assets/54954576/873a989f-34ed-4279-8a8b-709ea1d3f6dd)
+## Comparison between `surface.GetTextSize` and `surface.GetVisualCharacterHeight`
+![image](https://github.com/noaccessl/glua-VisualCharacterHeight/assets/54954576/f81035df-2f00-41b5-9551-6ffe0afbafad)
 ```lua
 local font = 'DermaLarge'
 local char = 'a'
