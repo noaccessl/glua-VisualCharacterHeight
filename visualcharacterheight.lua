@@ -20,10 +20,34 @@ do
 	local min = math.min
 	local max = math.max
 
+	local font = 'TargetID'
+	local cache = setmetatable( {}, { __mode = 'k' } )
+
+	timer.Create( 'surface.ClearVCHCache', 60, 0, function()
+		for i = 1, #cache do cache[i] = nil end
+	end )
+
+	function surface.SetFont( _font )
+
+		font = _font
+		return SetFont(_font )
+
+	end
+
 	function surface.GetVisualCharacterHeight( char, font_optional )
 
 		if font_optional then
 			SetFont( font_optional )
+		end
+
+		if not cache[font] then
+			cache[font] = {}
+		end
+
+		local cached = cache[font][char]
+
+		if cached then
+			return cached.height, cached.emptySpace
 		end
 
 		char = char or 'ЁQ'
@@ -70,7 +94,13 @@ do
 
 		max_y = max_y + 1
 
-		return max( max_y - min_y, 1 ), min_y
+		local height, emptySpace = max( max_y - min_y, 1 ), min_y
+
+		if not cache[font][char] then
+			cache[font][char] = { height = height; emptySpace = emptySpace }
+		end
+
+		return height, emptySpace
 
 	end
 
