@@ -1,22 +1,11 @@
 do
 
-	local GetRenderTargetEx = GetRenderTargetEx
-	local PushRenderTarget = render.PushRenderTarget
-	local PopRenderTarget = render.PopRenderTarget
-	local CapturePixels = render.CapturePixels
-	local ReadPixel = render.ReadPixel
-
 	local SetFont = surface.SetFont
-	local GetTextSize = surface.GetTextSize
-	local SetDrawColor = surface.SetDrawColor
-	local DrawRect = surface.DrawRect
-	local SetTextPos = surface.SetTextPos
-	local SetTextColor = surface.SetTextColor
-	local DrawText = surface.DrawText
 
-	local Start2D = cam.Start2D
-	local End2D = cam.End2D
+	local find = string.find
+	local DrawText = draw.DrawText
 
+	local ReadPixel = render.ReadPixel
 	local min = math.min
 	local max = math.max
 
@@ -37,7 +26,7 @@ do
 	function surface.GetVisualCharacterHeight( char, font_optional )
 
 		if font_optional then
-			SetFont( font_optional )
+			surface.SetFont( font_optional )
 		end
 
 		if not cache[font] then
@@ -51,24 +40,30 @@ do
 		end
 
 		char = char or 'ЁQ'
-		local w, h = GetTextSize( char )
+		local w, h = surface.GetTextSize( char )
 
 		local rt = GetRenderTargetEx( char, w, h, RT_SIZE_LITERAL, MATERIAL_RT_DEPTH_NONE, 1, 0, IMAGE_FORMAT_DEFAULT )
 
-		PushRenderTarget( rt )
+		render.PushRenderTarget( rt )
 
-			Start2D()
+			cam.Start2D()
 
-				SetDrawColor( color_black )
-				DrawRect( 0, 0, w, h )
+				surface.SetDrawColor( color_black )
+				surface.DrawRect( 0, 0, w, h )
 
-				SetTextPos( 0, 0 )
-				SetTextColor( 255, 255, 255, 255 )
-				DrawText( char )
+				if find( char, '\n' ) ~= nil then
+					DrawText( char, font, 0, 0, color_white )
+				else
 
-			End2D()
+					surface.SetTextPos( 0, 0 )
+					surface.SetTextColor( 255, 255, 255, 255 )
+					surface.DrawText( char )
 
-			CapturePixels()
+				end
+
+			cam.End2D()
+
+			render.CapturePixels()
 
 			local min_y = h
 			local max_y = 0
@@ -90,7 +85,7 @@ do
 
 			end
 
-		PopRenderTarget()
+		render.PopRenderTarget()
 
 		max_y = max_y + 1
 
