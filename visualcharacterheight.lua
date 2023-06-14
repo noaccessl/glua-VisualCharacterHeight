@@ -1,6 +1,7 @@
-do
+surface.CreateFontEx = surface.CreateFontEx or surface.CreateFont
+surface.SetFontEx = surface.SetFontEx or surface.SetFont
 
-	local SetFont = surface.SetFont
+do
 
 	local find = string.find
 	local DrawText = draw.DrawText
@@ -10,16 +11,25 @@ do
 	local max = math.max
 
 	local font = 'TargetID'
-	local cache = setmetatable( {}, { __mode = 'k' } )
+	local cache = {}
 
-	timer.Create( 'surface.ClearVCHCache', 60, 0, function()
-		for i = 1, #cache do cache[i] = nil end
-	end )
+	function surface.ClearVCHCache()
+		cache = {}
+	end
+
+	timer.Create( 'surface.ClearVCHCache', 600, 0, surface.ClearVCHCache )
+
+	function surface.CreateFont( _font, data )
+
+		cache[_font] = nil
+		return surface.CreateFontEx( _font, data )
+
+	end
 
 	function surface.SetFont( _font )
 
 		font = _font
-		return SetFont(_font )
+		return surface.SetFontEx( _font )
 
 	end
 
