@@ -31,7 +31,7 @@ do
 
 	function surface.CreateFont( font, data )
 
-		cache[font] = {}
+		cache[font] = nil
 		return surface.ex.CreateFont( font, data )
 
 	end
