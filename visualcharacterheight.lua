@@ -1,5 +1,9 @@
-surface.CreateFontEx = surface.CreateFontEx or surface.CreateFont
-surface.SetFontEx = surface.SetFontEx or surface.SetFont
+surface.ex = surface.ex or {
+
+	CreateFont = surface.CreateFont;
+	SetFont = surface.SetFont
+
+}
 
 do
 
@@ -10,33 +14,36 @@ do
 	local min = math.min
 	local max = math.max
 
-	local font = 'TargetID'
 	local cache = {}
 
 	function surface.ClearVCHCache()
 		cache = {}
 	end
 
-	timer.Create( 'surface.ClearVCHCache', 600, 0, surface.ClearVCHCache )
+	local current = 'DermaDefault'
 
-	function surface.CreateFont( _font, data )
+	function surface.SetFont( font )
 
-		cache[_font] = nil
-		return surface.CreateFontEx( _font, data )
-
-	end
-
-	function surface.SetFont( _font )
-
-		font = _font
-		return surface.SetFontEx( _font )
+		current = font
+		return surface.ex.SetFont( font )
 
 	end
 
-	function surface.GetVisualCharacterHeight( char, font_optional )
+	function surface.CreateFont( font, data )
 
-		if font_optional then
-			surface.SetFont( font_optional )
+		cache[font] = {}
+		return surface.ex.CreateFont( font, data )
+
+	end
+
+	local rt = GetRenderTargetEx( 'vch', 1024, 1024, RT_SIZE_LITERAL, MATERIAL_RT_DEPTH_NONE, 2, 0, IMAGE_FORMAT_BGR888 )
+
+	function surface.GetVisualCharacterHeight( char, font )
+
+		if font then
+			surface.SetFont( font )
+		else
+			font = current
 		end
 
 		if not cache[font] then
@@ -52,21 +59,18 @@ do
 		char = char or 'ЁQ'
 		local w, h = surface.GetTextSize( char )
 
-		local rt = GetRenderTargetEx( char, w, h, RT_SIZE_LITERAL, MATERIAL_RT_DEPTH_NONE, 1, 0, IMAGE_FORMAT_DEFAULT )
-
 		render.PushRenderTarget( rt )
 
-			cam.Start2D()
+			render.Clear( 0, 0, 0, 255 )
 
-				surface.SetDrawColor( color_black )
-				surface.DrawRect( 0, 0, w, h )
+			cam.Start2D()
 
 				if find( char, '\n' ) ~= nil then
 					DrawText( char, font, 0, 0, color_white )
 				else
 
 					surface.SetTextPos( 0, 0 )
-					surface.SetTextColor( 255, 255, 255, 255 )
+					surface.SetTextColor( 255, 255, 255 )
 					surface.DrawText( char )
 
 				end
