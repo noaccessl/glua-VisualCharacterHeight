@@ -59,6 +59,8 @@ do
 		char = char or 'ЁQ'
 		local w, h = surface.GetTextSize( char )
 
+		surface.SetAlphaMultiplier( 1 )
+
 		render.PushRenderTarget( rt )
 
 			render.Clear( 0, 0, 0, 255 )
