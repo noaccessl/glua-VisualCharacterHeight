@@ -1,73 +1,92 @@
+--[[---------------------------------------------------------------------------
+	Store original functions
+---------------------------------------------------------------------------]]
 surface.ex = surface.ex or {
 
-	CreateFont = surface.CreateFont;
-	SetFont = surface.SetFont
+	CreateFont	= surface.CreateFont;
+	SetFont		= surface.SetFont
 
 }
 
+--[[---------------------------------------------------------------------------
+	Visual character height
+---------------------------------------------------------------------------]]
 do
 
-	local find = string.find
-	local DrawText = draw.DrawText
+	local StringFind = string.find
+	local DrawText	 = draw.DrawText
 
 	local ReadPixel = render.ReadPixel
-	local min = math.min
-	local max = math.max
+	local MathMin	= math.min
+	local MathMax	= math.max
 
-	local cache = {}
+	local Cache = {}
 
 	function surface.ClearVCHCache()
-		cache = {}
+		Cache = {}
 	end
 
-	local current = 'DermaDefault'
+	local UsingFont = 'DermaDefault'
 
 	function surface.SetFont( font )
 
-		current = font
+		UsingFont = font
 		return surface.ex.SetFont( font )
 
 	end
 
 	function surface.CreateFont( font, data )
 
-		cache[font] = nil
+		Cache[ font ] = nil
 		return surface.ex.CreateFont( font, data )
 
 	end
 
-	local rt = GetRenderTargetEx( 'vch', 1024, 1024, RT_SIZE_LITERAL, MATERIAL_RT_DEPTH_NONE, 2, 0, IMAGE_FORMAT_BGR888 )
+	local RT = GetRenderTargetEx( 'vch', 1024, 1024, RT_SIZE_LITERAL, MATERIAL_RT_DEPTH_NONE, 2, 0, IMAGE_FORMAT_BGR888 )
 
 	function surface.GetVisualCharacterHeight( char, font )
 
+		--
+		-- Prepare font
+		--
 		if font then
 			surface.SetFont( font )
 		else
-			font = current
+			font = UsingFont
 		end
 
-		if not cache[font] then
-			cache[font] = {}
+		--
+		-- Prepare place in cache
+		--
+		if not Cache[ font ] then
+			Cache[ font ] = {}
 		end
 
-		local cached = cache[font][char]
+		--
+		-- Return stored if it exists
+		--
+		local stored = Cache[ font ][ char ]
 
-		if cached then
-			return cached.height, cached.emptySpace
+		if stored then
+			return stored.Height, stored.EmptySpace
 		end
 
 		char = char or 'ЁQ'
+
 		local w, h = surface.GetTextSize( char )
 
+		--
+		-- For proper calculations
+		--
 		surface.SetAlphaMultiplier( 1 )
 
-		render.PushRenderTarget( rt )
+		render.PushRenderTarget( RT )
 
 			render.Clear( 0, 0, 0, 255 )
 
 			cam.Start2D()
 
-				if find( char, '\n' ) ~= nil then
+				if StringFind( char, '\n' ) ~= nil then
 					DrawText( char, font, 0, 0, color_white )
 				else
 
@@ -81,8 +100,8 @@ do
 
 			render.CapturePixels()
 
-			local min_y = h
-			local max_y = 0
+			local StartPos = h
+			local EndPos = 0
 
 			for y = 0, h - 1 do
 
@@ -92,8 +111,8 @@ do
 
 					if r > 0 and g > 0 and b > 0 then
 
-						min_y = min( min_y, y )
-						max_y = max( max_y, y )
+						StartPos = MathMin( StartPos, y )
+						EndPos = MathMax( EndPos, y )
 
 					end
 
@@ -103,15 +122,15 @@ do
 
 		render.PopRenderTarget()
 
-		max_y = max_y + 1
+		EndPos = EndPos + 1
 
-		local height, emptySpace = max( max_y - min_y, 1 ), min_y
+		local Height, EmptySpace = MathMax( EndPos - StartPos, 1 ), StartPos
 
-		if not cache[font][char] then
-			cache[font][char] = { height = height; emptySpace = emptySpace }
+		if not Cache[ font ][ char ] then
+			Cache[ font ][ char ] = { Height = Height; EmptySpace = EmptySpace }
 		end
 
-		return height, emptySpace
+		return Height, EmptySpace
 
 	end
 
