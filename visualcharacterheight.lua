@@ -1,7 +1,7 @@
 --[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 	Purpose: Store the original functions
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
-surface.CreateFontX	= surface.CreateFontX or surface.CreateFont
+surface.CreateFontX = surface.CreateFontX or surface.CreateFont
 surface.SetFontX = surface.SetFontX or surface.SetFont
 
 local CreateFontX = surface.CreateFontX
