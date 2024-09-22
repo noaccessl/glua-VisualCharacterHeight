@@ -1,92 +1,144 @@
 --[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-	Store original functions
+	Purpose: Store the original functions
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
-surface.ex = surface.ex or {
+surface.CreateFontX	= surface.CreateFontX or surface.CreateFont
+surface.SetFontX = surface.SetFontX or surface.SetFont
 
-	CreateFont	= surface.CreateFont;
-	SetFont		= surface.SetFont
+local CreateFontX = surface.CreateFontX
+local SetFontX = surface.SetFontX
 
-}
 
 --[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-	Visual character height
+	Purpose: Store the current font for later access
+–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
+local FONT_CURRENT = 'DermaDefault'
+
+function surface.SetFont( font )
+
+	FONT_CURRENT = font
+	return SetFontX( font )
+
+end
+
+
+--[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+	Purpose: Find the visual height of specific character(-s)
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
 do
 
-	local StringFind = string.find
-	local DrawText	 = draw.DrawText
+	--
+	-- Globals, Utilities
+	--
+	local pairs = pairs
+
+	local isstring = isstring
+
+	local strfind	= string.find
+	local DrawText	= draw.DrawText
 
 	local ReadPixel = render.ReadPixel
-	local MathMin	= math.min
-	local MathMax	= math.max
+	local MathMin	= function( a, b ) return ( a < b ) and a or b end
+	local MathMax	= function( a, b ) return ( a > b ) and a or b end
 
+
+	--
+	-- Cache
+	--
 	local Cache = {}
 
 	function surface.ClearVCHCache()
-		Cache = {}
-	end
 
-	local UsingFont = 'DermaDefault'
-
-	function surface.SetFont( font )
-
-		UsingFont = font
-		return surface.ex.SetFont( font )
+		for font in pairs( Cache ) do
+			Cache[ font ] = nil
+		end
 
 	end
 
-	function surface.CreateFont( font, data )
+	function surface.CreateFont( name, data )
 
-		Cache[ font ] = nil
-		return surface.ex.CreateFont( font, data )
+		-- Purge the font's cache so that it may be calculated properly later
+		-- Because some fonts are made with "dynamic" sizes e.g. through ScreenScale( ... )
+		Cache[ name ] = nil
+
+		return CreateFontX( name, data )
 
 	end
 
-	local RT = GetRenderTargetEx( 'vch', 1024, 1024, RT_SIZE_LITERAL, MATERIAL_RT_DEPTH_NONE, 2, 0, IMAGE_FORMAT_BGR888 )
+	--
+	-- Main
+	--
+	local pTextureVCH = GetRenderTargetEx( '_rt_VisualCharacterHeight',
+
+		1024,						-- width
+		1024,						-- height
+
+		RT_SIZE_LITERAL,			-- sizeMode
+		MATERIAL_RT_DEPTH_NONE,		-- depthMode
+		bit.bor( 2, 256 ),			-- textureFlags
+		0,							-- rtFlags
+		IMAGE_FORMAT_RGB888			-- imageFormat
+
+	)
 
 	function surface.GetVisualCharacterHeight( char, font )
 
+		if ( not isstring( char ) ) then
+			assert( false, Format( 'bad argument #1 to \'GetVisualCharacterHeight\' (string expected, got %s)', type( char ) ) )
+		end
+
 		--
-		-- Prepare font
+		-- Manage the font
 		--
-		if font then
+		if ( font ) then
 			surface.SetFont( font )
 		else
-			font = UsingFont
+			font = FONT_CURRENT
 		end
 
 		--
 		-- Prepare place in cache
 		--
-		if not Cache[ font ] then
+		local CachedFont = Cache[ font ]
+
+		if ( not CachedFont ) then
+
 			Cache[ font ] = {}
+			CachedFont = Cache[ font ]
+
+		else
+
+			--
+			-- Return the stored if it exists
+			--
+			local data = CachedFont[ char ]
+
+			if ( data ) then
+				return data.Height, data.EmptySpace
+			end
+
 		end
-
-		--
-		-- Return stored if it exists
-		--
-		local stored = Cache[ font ][ char ]
-
-		if stored then
-			return stored.Height, stored.EmptySpace
-		end
-
-		char = char or 'ЁQ'
 
 		local w, h = surface.GetTextSize( char )
 
 		--
-		-- For proper calculations
+		-- Just in case if something has set it to zero
+		-- For example, this is called in some panel's paint, but the panel is fully transparent
 		--
 		surface.SetAlphaMultiplier( 1 )
 
-		render.PushRenderTarget( RT )
+		--
+		-- Process the RT
+		--
+		render.PushRenderTarget( pTextureVCH )
 
 			render.Clear( 0, 0, 0, 255 )
 
+			--
+			-- Draw the character(-s)
+			--
 			cam.Start2D()
 
-				if StringFind( char, '\n' ) ~= nil then
+				if ( strfind( char, '\n' ) ~= nil ) then
 					DrawText( char, font, 0, 0, color_white )
 				else
 
@@ -98,10 +150,16 @@ do
 
 			cam.End2D()
 
+			--
+			-- Get access to the pixels
+			--
 			render.CapturePixels()
 
-			local StartPos = h
-			local EndPos = 0
+			--
+			-- Calculate
+			--
+			local iStartY = h
+			local iEndY = 0
 
 			for y = 0, h - 1 do
 
@@ -109,10 +167,10 @@ do
 
 					local r, g, b = ReadPixel( x, y )
 
-					if r > 0 and g > 0 and b > 0 then
+					if ( r > 0 and g > 0 and b > 0 ) then
 
-						StartPos = MathMin( StartPos, y )
-						EndPos = MathMax( EndPos, y )
+						iStartY = MathMin( iStartY, y )
+						iEndY = MathMax( iEndY, y )
 
 					end
 
@@ -122,15 +180,21 @@ do
 
 		render.PopRenderTarget()
 
-		EndPos = EndPos + 1
+		--
+		-- Find out the height and the empty space
+		--
+		iEndY = iEndY + 1
 
-		local Height, EmptySpace = MathMax( EndPos - StartPos, 1 ), StartPos
+		local iHeight, iEmptySpace = MathMax( iEndY - iStartY, 1 ), iStartY
 
-		if not Cache[ font ][ char ] then
-			Cache[ font ][ char ] = { Height = Height; EmptySpace = EmptySpace }
+		--
+		-- Store in the cache
+		--
+		if ( not CachedFont[ char ] ) then
+			CachedFont[ char ] = { Height = iHeight; EmptySpace = iEmptySpace }
 		end
 
-		return Height, EmptySpace
+		return iHeight, iEmptySpace
 
 	end
 
