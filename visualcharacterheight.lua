@@ -1,11 +1,11 @@
 --[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 	Purpose: Store the original functions
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
-surface.CreateFontX = surface.CreateFontX or surface.CreateFont
-surface.SetFontX = surface.SetFontX or surface.SetFont
+surface.Internal_CreateFont = surface.Internal_CreateFont or surface.CreateFont
+surface.Internal_SetFont = surface.Internal_SetFont or surface.SetFont
 
-local CreateFontX = surface.CreateFontX
-local SetFontX = surface.SetFontX
+local Internal_CreateFont = surface.Internal_CreateFont
+local Internal_SetFont = surface.Internal_SetFont
 
 
 --[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
@@ -16,7 +16,7 @@ local FONT_CURRENT = 'DermaDefault'
 function surface.SetFont( font )
 
 	FONT_CURRENT = font
-	return SetFontX( font )
+	return Internal_SetFont( font )
 
 end
 
@@ -41,42 +41,36 @@ do
 	local MathMax	= function( a, b ) return ( a > b ) and a or b end
 
 
-	--
-	-- Cache
-	--
-	local Cache = {}
+	local VCHCache = {}
 
 	function surface.ClearVCHCache()
 
-		for font in pairs( Cache ) do
-			Cache[ font ] = nil
+		for font in pairs( VCHCache ) do
+			VCHCache[font] = nil
 		end
 
 	end
 
-	function surface.CreateFont( name, data )
+	function surface.CreateFont( FontName, FontData )
 
 		-- Purge the font's cache so that it may be calculated properly later
 		-- Because some fonts are made with "dynamic" sizes e.g. through ScreenScale( ... )
-		Cache[ name ] = nil
+		VCHCache[FontName] = nil
 
-		return CreateFontX( name, data )
+		return Internal_CreateFont( FontName, FontData )
 
 	end
 
-	--
-	-- Main
-	--
-	local pTextureVCH = GetRenderTargetEx( '_rt_VisualCharacterHeight',
+	local pTextureVCH = GetRenderTargetEx(
 
-		1024,						-- width
-		1024,						-- height
-
-		RT_SIZE_LITERAL,			-- sizeMode
-		MATERIAL_RT_DEPTH_NONE,		-- depthMode
-		bit.bor( 2, 256 ),			-- textureFlags
-		0,							-- rtFlags
-		IMAGE_FORMAT_RGB888			-- imageFormat
+		'_rt_VisualCharacterHeight',
+		1024,
+		1024,
+		RT_SIZE_LITERAL,
+		MATERIAL_RT_DEPTH_NONE,
+		bit.bor( 2, 256 ),
+		0,
+		IMAGE_FORMAT_RGB888
 
 	)
 
@@ -96,24 +90,24 @@ do
 		end
 
 		--
-		-- Prepare place in cache
+		-- Prepare a place in the cache
 		--
-		local CachedFont = Cache[ font ]
+		local FontCache = VCHCache[ font ]
 
-		if ( not CachedFont ) then
+		if ( not FontCache ) then
 
-			Cache[ font ] = {}
-			CachedFont = Cache[ font ]
+			FontCache = {}
+			VCHCache[font] = FontCache
 
 		else
 
 			--
 			-- Return the stored if it exists
 			--
-			local data = CachedFont[ char ]
+			local data_t = FontCache[char]
 
-			if ( data ) then
-				return data.Height, data.EmptySpace
+			if ( data_t ) then
+				return data_t.Height, data_t.EmptySpace
 			end
 
 		end
@@ -190,8 +184,8 @@ do
 		--
 		-- Store in the cache
 		--
-		if ( not CachedFont[ char ] ) then
-			CachedFont[ char ] = { Height = iHeight; EmptySpace = iEmptySpace }
+		if ( not FontCache[char] ) then
+			FontCache[char] = { Height = iHeight; EmptySpace = iEmptySpace }
 		end
 
 		return iHeight, iEmptySpace
