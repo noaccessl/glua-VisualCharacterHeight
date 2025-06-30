@@ -130,7 +130,7 @@ function surface.GetVisualCharacterHeight( char, font )
 
 	local w, h = surface.GetTextSize( char )
 
-	-- Just in case the function is called where/when the overall alpha is zero at the frame
+	-- Just in case the function is called where/when the overall alpha is zero at the moment/frame
 	surface.SetAlphaMultiplier( 1 )
 
 	--
