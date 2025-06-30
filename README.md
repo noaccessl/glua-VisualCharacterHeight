@@ -1,19 +1,23 @@
 # glua-VisualCharacterHeight
-Finds visual height of a character(-s). May be very helpful when positioning text by height. Supports newlines.
+ Adds a function that works out the visual height of the provided character(-s).
 
-## Comparison between `surface.GetTextSize` and `surface.GetVisualCharacterHeight`
-![image](https://github.com/noaccessl/glua-VisualCharacterHeight/assets/54954576/f81035df-2f00-41b5-9551-6ffe0afbafad)
+ May be very helpful for positioning text by height.
+ 
+ Newlines are supported.
+
+### `GetTextSize` vs `GetVisualCharacterHeight`
+![image](image.png)
+
 ```lua
 local font = 'DermaLarge'
-local char = 'a'
-local visH, emptySpace = surface.GetVisualCharacterHeight( char, font )
+local char = 'abcdefg'
 
 hook.Add( 'HUDPaint', '', function()
 
 	surface.SetFont( font )
 	local w, h = surface.GetTextSize( char )
 
-	local x = ScrW() * 0.5 - w * 0.5 - 5
+	local x = ScrW() * 0.5 - w - 5
 	local y = ScrH() * 0.5
 
 	surface.SetDrawColor( 255, 180, 180 )
@@ -21,31 +25,33 @@ hook.Add( 'HUDPaint', '', function()
 
 	draw.SimpleText( char, font, x, y, color_black )
 
-	x = ScrW() * 0.5 + 5 + w * 0.5
+	x = ScrW() * 0.5 + 5
+
+	local visualheight, roofheight = surface.GetVisualCharacterHeight( char, font )
 
 	surface.SetDrawColor( 180, 255, 180 )
-	surface.DrawRect( x, y, w, visH )
+	surface.DrawRect( x, y, w, visualheight )
 
-	y = y - emptySpace
+	y = y - roofheight
 
 	draw.SimpleText( char, font, x, y, color_black )
 
 end )
 ```
-Also, works with newlines
 
-![image](https://github.com/noaccessl/glua-VisualCharacterHeight/assets/54954576/b2318692-b2b2-4ddc-a464-b26337cdab09)
+#### With newlines
+![image](image-1.png)
+
 ```lua
 local font = 'DermaLarge'
-local char = 'a\nb'
-local visH, emptySpace = surface.GetVisualCharacterHeight( char, font )
+local char = 'abc\ndefg'
 
 hook.Add( 'HUDPaint', '', function()
 
 	surface.SetFont( font )
 	local w, h = surface.GetTextSize( char )
 
-	local x = ScrW() * 0.5 - w * 0.5 - 5
+	local x = ScrW() * 0.5 - w - 5
 	local y = ScrH() * 0.5
 
 	surface.SetDrawColor( 255, 180, 180 )
@@ -53,12 +59,14 @@ hook.Add( 'HUDPaint', '', function()
 
 	draw.DrawText( char, font, x, y, color_black )
 
-	x = ScrW() * 0.5 + 5 + w * 0.5
+	x = ScrW() * 0.5 + 5
+
+	local visualheight, roofheight = surface.GetVisualCharacterHeight( char, font )
 
 	surface.SetDrawColor( 180, 255, 180 )
-	surface.DrawRect( x, y, w, visH )
+	surface.DrawRect( x, y, w, visualheight )
 
-	y = y - emptySpace
+	y = y - roofheight
 
 	draw.DrawText( char, font, x, y, color_black )
 

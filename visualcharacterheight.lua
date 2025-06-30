@@ -1,138 +1,155 @@
+
 --[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-	Purpose: Store the original functions
+	Prepare
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
-surface.Internal_CreateFont = surface.Internal_CreateFont or surface.CreateFont
-surface.Internal_SetFont = surface.Internal_SetFont or surface.SetFont
+--
+-- Functions & libraries
+--
+local isstring = isstring
+local surface = surface
+local render = render
+local ReadPixel = render.ReadPixel
+local cam = cam
+local string = string
+local DrawText = draw.DrawText
 
-local Internal_CreateFont = surface.Internal_CreateFont
-local Internal_SetFont = surface.Internal_SetFont
 
+--[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+	Purpose: Store the former functions
+–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
+surface.CreateFontEx = surface.CreateFontEx or surface.CreateFont
+surface.SetFontEx = surface.SetFontEx or surface.SetFont
+
+local CreateFontEx = surface.CreateFontEx
+local SetFontEx = surface.SetFontEx
+
+--[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+	Purpose: Override surface.CreateFont
+–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
+function surface.CreateFont( name, data )
+
+	-- Clearing the font's cache so that it may be calculated properly later,
+	-- just in case if the font is sized dynamically across the session
+	surface.ClearVCHCache( name )
+
+	return CreateFontEx( name, data )
+
+end
 
 --[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 	Purpose: Store the current font for later access
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
-local FONT_CURRENT = 'DermaDefault'
+local g_strCurrentTextFont = 'DermaDefault'
 
 function surface.SetFont( font )
 
-	FONT_CURRENT = font
-	return Internal_SetFont( font )
+	g_strCurrentTextFont = font
+
+	return SetFontEx( font )
 
 end
 
 
 --[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-	Purpose: Find the visual height of specific character(-s)
+	Cache
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
-do
+local VCHCache = {}
+
+function surface.ClearVCHCache( specificfont )
+
+	if ( specificfont ) then
+		VCHCache[specificfont] = nil
+	else
+		for font in next, VCHCache do VCHCache[font] = nil end
+	end
+
+end
+
+--[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+	The common render target
+–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
+local IMAGE_FORMAT_A8 = 8
+
+local g_rt_VCH = GetRenderTargetEx(
+
+	'_rt_VisualCharacterHeight',
+	2048, 2048,
+	RT_SIZE_NO_CHANGE, MATERIAL_RT_DEPTH_NONE,
+	2 + 256, 0,
+	IMAGE_FORMAT_A8
+
+)
+
+--[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+	Purpose: Works out the visual height of the provided character(-s)
+–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
+function surface.GetVisualCharacterHeight( char, font )
+
+	if ( not isstring( char ) ) then
+		assert( false, Format( 'bad argument #1 to \'GetVisualCharacterHeight\' (string expected, got %s)', type( char ) ) )
+	end
 
 	--
-	-- Globals, Utilities
+	-- Manage the font
 	--
-	local pairs = pairs
+	if ( font and font ~= g_strCurrentTextFont ) then
+		surface.SetFont( font )
+	else
+		font = g_strCurrentTextFont
+	end
 
-	local isstring = isstring
+	--
+	-- Prepare a place in the cache
+	--
+	local FontCache = VCHCache[font]
 
-	local strfind	= string.find
-	local DrawText	= draw.DrawText
+	if ( not FontCache ) then
 
-	local ReadPixel = render.ReadPixel
-	local MathMin	= function( a, b ) return ( a < b ) and a or b end
-	local MathMax	= function( a, b ) return ( a > b ) and a or b end
+		FontCache = {}
+		VCHCache[font] = FontCache
 
+	else -- Return the stored if it exists
 
-	local VCHCache = {}
+		local charmeasures = FontCache[char]
 
-	function surface.ClearVCHCache()
-
-		for font in pairs( VCHCache ) do
-			VCHCache[font] = nil
+		if ( charmeasures ) then
+			return charmeasures.visualheight, charmeasures.roofheight
 		end
 
 	end
 
-	function surface.CreateFont( FontName, FontData )
+	--
+	-- Work out the operating area
+	--
+	if ( string.find( char, '\t' ) ) then
 
-		-- Purge the font's cache so that it may be calculated properly later
-		-- Because some fonts are made with "dynamic" sizes e.g. through ScreenScale( ... )
-		VCHCache[FontName] = nil
-
-		return Internal_CreateFont( FontName, FontData )
+		local tabWidth = 8
+		char = string.gsub( char, '\t', string.rep( ' ', tabWidth ) )
 
 	end
 
-	local pTextureVCH = GetRenderTargetEx(
+	local w, h = surface.GetTextSize( char )
 
-		'_rt_VisualCharacterHeight',
-		1024,
-		1024,
-		RT_SIZE_LITERAL,
-		MATERIAL_RT_DEPTH_NONE,
-		bit.bor( 2, 256 ),
-		0,
-		IMAGE_FORMAT_RGB888
+	-- Just in case the function is called where/when the overall alpha is zero at the frame
+	surface.SetAlphaMultiplier( 1 )
 
-	)
+	--
+	-- The main process
+	--
+	local iStartY
+	local iEndY
 
-	function surface.GetVisualCharacterHeight( char, font )
+	do
 
-		if ( not isstring( char ) ) then
-			assert( false, Format( 'bad argument #1 to \'GetVisualCharacterHeight\' (string expected, got %s)', type( char ) ) )
-		end
+		render.PushRenderTarget( g_rt_VCH )
+		render.SetScissorRect( 0, 0, w, h, true )
 
-		--
-		-- Manage the font
-		--
-		if ( font ) then
-			surface.SetFont( font )
-		else
-			font = FONT_CURRENT
-		end
+			render.Clear( 255, 255, 255, 0 )
 
-		--
-		-- Prepare a place in the cache
-		--
-		local FontCache = VCHCache[ font ]
-
-		if ( not FontCache ) then
-
-			FontCache = {}
-			VCHCache[font] = FontCache
-
-		else
-
-			--
-			-- Return the stored if it exists
-			--
-			local data_t = FontCache[char]
-
-			if ( data_t ) then
-				return data_t.Height, data_t.EmptySpace
-			end
-
-		end
-
-		local w, h = surface.GetTextSize( char )
-
-		--
-		-- Just in case if something has set it to zero
-		-- For example, this is called in some panel's paint, but the panel is fully transparent
-		--
-		surface.SetAlphaMultiplier( 1 )
-
-		--
-		-- Process the RT
-		--
-		render.PushRenderTarget( pTextureVCH )
-
-			render.Clear( 0, 0, 0, 255 )
-
-			--
-			-- Draw the character(-s)
-			--
+			-- Draw
 			cam.Start2D()
 
-				if ( strfind( char, '\n' ) ~= nil ) then
+				if ( string.find( char, '\n' ) ) then
 					DrawText( char, font, 0, 0, color_white )
 				else
 
@@ -144,52 +161,82 @@ do
 
 			cam.End2D()
 
-			--
-			-- Get access to the pixels
-			--
+			-- Access the pixels
 			render.CapturePixels()
 
 			--
-			-- Calculate
+			-- Calculations
 			--
-			local iStartY = h
-			local iEndY = 0
+			do
 
-			for y = 0, h - 1 do
+				local y, stop_y = -1, h - 1
 
-				for x = 0, w - 1 do
+				::find_start_1::
+				y = y + 1
 
-					local r, g, b = ReadPixel( x, y )
+					local x, stop_x = -1, w - 1
 
-					if ( r > 0 and g > 0 and b > 0 ) then
+					::find_start_2::
+					x = x + 1
 
-						iStartY = MathMin( iStartY, y )
-						iEndY = MathMax( iEndY, y )
+						local _, _, _, alpha = ReadPixel( x, y )
 
-					end
+						if ( alpha ~= 0 ) then
 
-				end
+							iStartY = y
+							goto exit
+
+						end
+
+					if ( x ~= stop_x ) then goto find_start_2 end
+
+				if ( y ~= stop_y ) then goto find_start_1 end
+
+				::exit::
 
 			end
 
+			do
+
+				local y, stop_y = h - 1, 0
+
+				::find_end_1::
+				y = y - 1
+
+					local x, stop_x = -1, w - 1
+
+					::find_end_2::
+					x = x + 1
+
+						local _, _, _, alpha = ReadPixel( x, y )
+
+						if ( alpha ~= 0 ) then
+
+							iEndY = y
+							goto exit
+
+						end
+
+					if ( x ~= stop_x ) then goto find_end_2 end
+
+				if ( y ~= stop_y ) then goto find_end_1 end
+
+				::exit::
+
+			end
+
+		render.SetScissorRect( 0, 0, 0, 0, false )
 		render.PopRenderTarget()
 
-		--
-		-- Find out the height and the empty space
-		--
-		iEndY = iEndY + 1
-
-		local iHeight, iEmptySpace = MathMax( iEndY - iStartY, 1 ), iStartY
-
-		--
-		-- Store in the cache
-		--
-		if ( not FontCache[char] ) then
-			FontCache[char] = { Height = iHeight; EmptySpace = iEmptySpace }
-		end
-
-		return iHeight, iEmptySpace
-
 	end
+
+	local visualheight = ( iEndY - iStartY ) + 1
+	local roofheight = iStartY
+
+	if ( not FontCache[char] ) then
+		FontCache[char] = { visualheight = visualheight; roofheight = roofheight }
+	end
+
+	return visualheight, roofheight
 
 end
