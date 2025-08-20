@@ -1,4 +1,21 @@
 
+--
+-- Advanced settings
+--
+local VCH_OVERRIDE_DEFAULTS = true -- Should the script override default surface.CreateFont & surface.SetFont?
+
+local g_pfnGetFont
+--[[
+	If you set VCH_OVERRIDE_DEFAULTS to false,
+	then assumingly you have your own surface.GetFont
+	and in that case set g_pfnGetFont to it.
+
+	Or.
+
+	Just provide the font-in-use to the surface.GetVisualCharacterHeight.
+]]
+
+
 --[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 	Prepare
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
@@ -17,35 +34,52 @@ local DrawText = draw.DrawText
 --[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 	Purpose: Store the former functions
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
-surface.CreateFontEx = surface.CreateFontEx or surface.CreateFont
-surface.SetFontEx = surface.SetFontEx or surface.SetFont
+local CreateFontEx
+local SetFontEx
 
-local CreateFontEx = surface.CreateFontEx
-local SetFontEx = surface.SetFontEx
+if ( VCH_OVERRIDE_DEFAULTS ) then
+
+	surface.CreateFontEx = surface.CreateFontEx or surface.CreateFont
+	surface.SetFontEx = surface.SetFontEx or surface.SetFont
+
+	CreateFontEx = surface.CreateFontEx
+	SetFontEx = surface.SetFontEx
+
+end
 
 --[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 	Purpose: Override surface.CreateFont
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
-function surface.CreateFont( name, data )
+if ( VCH_OVERRIDE_DEFAULTS ) then
 
-	-- Clearing the font's cache so that it may be calculated properly later,
-	-- just in case if the font is sized dynamically across the session
-	surface.ClearVCHCache( name )
+	function surface.CreateFont( name, data )
 
-	return CreateFontEx( name, data )
+		-- Clearing the font's cache so that it may be calculated properly later,
+		-- just in case if the font is sized dynamically across the session
+		VisualCharacterHeight_Uncache( name )
+
+		return CreateFontEx( name, data )
+
+	end
 
 end
 
 --[[–––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 	Purpose: Store the current font for later access
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
-local g_strCurrentTextFont = 'DermaDefault'
+local g_strCurrentTextFont
 
-function surface.SetFont( font )
+if ( VCH_OVERRIDE_DEFAULTS ) then
 
-	g_strCurrentTextFont = font
+	g_strCurrentTextFont = 'DermaDefault'
 
-	return SetFontEx( font )
+	function surface.SetFont( font )
+
+		g_strCurrentTextFont = font
+
+		return SetFontEx( font )
+
+	end
 
 end
 
@@ -55,7 +89,7 @@ end
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
 local VCHCache = {}
 
-function surface.ClearVCHCache( specificfont )
+function VisualCharacterHeight_Uncache( specificfont )
 
 	if ( specificfont ) then
 		VCHCache[specificfont] = nil
@@ -73,8 +107,8 @@ local IMAGE_FORMAT_A8 = 8
 local g_rt_VCH = GetRenderTargetEx(
 
 	'_rt_VisualCharacterHeight',
-	2048, 2048,
-	RT_SIZE_NO_CHANGE, MATERIAL_RT_DEPTH_NONE,
+	ScrW(), ScrH(),
+	RT_SIZE_FULL_FRAME_BUFFER, MATERIAL_RT_DEPTH_NONE,
 	2 + 256, 0,
 	IMAGE_FORMAT_A8
 
@@ -86,31 +120,51 @@ local g_rt_VCH = GetRenderTargetEx(
 function surface.GetVisualCharacterHeight( char, font )
 
 	if ( not isstring( char ) ) then
-		assert( false, Format( 'bad argument #1 to \'GetVisualCharacterHeight\' (string expected, got %s)', type( char ) ) )
+		error( Format( 'bad argument #1 to \'GetVisualCharacterHeight\' (string expected, got %s)', type( char ) ) )
 	end
 
 	--
 	-- Manage the font
 	--
-	if ( font and font ~= g_strCurrentTextFont ) then
-		surface.SetFont( font )
+	if ( not VCH_OVERRIDE_DEFAULTS ) then
+
+		if ( g_pfnGetFont ) then
+			g_strCurrentTextFont = g_pfnGetFont()
+		end
+
+		if ( not font and not g_strCurrentTextFont ) then
+			error( 'font to \'GetVisualCharacterHeight\' isn\'t provided or cannot be obtained' )
+		end
+
+		if ( font and ( g_strCurrentTextFont and g_strCurrentTextFont ~= font or true ) ) then
+			surface.SetFont( font )
+		elseif ( g_strCurrentTextFont ) then
+			font = g_strCurrentTextFont
+		end
+
 	else
-		font = g_strCurrentTextFont
+
+		if ( font and g_strCurrentTextFont ~= font ) then
+			surface.SetFont( font )
+		else
+			font = g_strCurrentTextFont
+		end
+
 	end
 
 	--
 	-- Prepare a place in the cache
 	--
-	local FontCache = VCHCache[font]
+	local fontcache = VCHCache[font]
 
-	if ( not FontCache ) then
+	if ( not fontcache ) then
 
-		FontCache = {}
-		VCHCache[font] = FontCache
+		fontcache = {}
+		VCHCache[font] = fontcache
 
 	else -- Return the stored if it exists
 
-		local charmeasures = FontCache[char]
+		local charmeasures = fontcache[char]
 
 		if ( charmeasures ) then
 			return charmeasures.visualheight, charmeasures.roofheight
@@ -233,8 +287,8 @@ function surface.GetVisualCharacterHeight( char, font )
 	local visualheight = ( iEndY - iStartY ) + 1
 	local roofheight = iStartY
 
-	if ( not FontCache[char] ) then
-		FontCache[char] = { visualheight = visualheight; roofheight = roofheight }
+	if ( not fontcache[char] ) then
+		fontcache[char] = { visualheight = visualheight; roofheight = roofheight }
 	end
 
 	return visualheight, roofheight
