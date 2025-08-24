@@ -104,7 +104,7 @@ end
 –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––]]
 local IMAGE_FORMAT_A8 = 8
 
-local g_rt_VCH = GetRenderTargetEx(
+local g_texVCH = GetRenderTargetEx(
 
 	'_rt_VisualCharacterHeight',
 	ScrW(), ScrH(),
@@ -155,16 +155,16 @@ function surface.GetVisualCharacterHeight( char, font )
 	--
 	-- Prepare a place in the cache
 	--
-	local fontcache = VCHCache[font]
+	local vchcache_font = VCHCache[font]
 
-	if ( not fontcache ) then
+	if ( not vchcache_font ) then
 
-		fontcache = {}
-		VCHCache[font] = fontcache
+		vchcache_font = {}
+		VCHCache[font] = vchcache_font
 
 	else -- Return the stored if it exists
 
-		local charmeasures = fontcache[char]
+		local charmeasures = vchcache_font[char]
 
 		if ( charmeasures ) then
 			return charmeasures.visualheight, charmeasures.roofheight
@@ -179,116 +179,116 @@ function surface.GetVisualCharacterHeight( char, font )
 
 		local tabWidth = 8
 		char = string.gsub( char, '\t', string.rep( ' ', tabWidth ) )
+		-- surface.GetTextSize doesn't take into account tabs
+		-- and/or a font may lack configuration regarding the tab character
 
 	end
 
 	local w, h = surface.GetTextSize( char )
 
-	-- Just in case the function is called where/when the overall alpha is zero at the moment/frame
-	surface.SetAlphaMultiplier( 1 )
-
 	--
 	-- The main process
 	--
-	local iStartY
-	local iEndY
+	local yTop
+	local yBottom
 
-	do
+	render.PushRenderTarget( g_texVCH )
+	render.SetScissorRect( 0, 0, w, h, true )
 
-		render.PushRenderTarget( g_rt_VCH )
-		render.SetScissorRect( 0, 0, w, h, true )
+		render.Clear( 255, 255, 255, 0 )
 
-			render.Clear( 255, 255, 255, 0 )
+		surface.SetAlphaMultiplier( 1 )
+		-- Just in case the overall alpha at the moment is zero
 
-			-- Draw
-			cam.Start2D()
+		-- Draw
+		cam.Start2D()
 
-				if ( string.find( char, '\n' ) ) then
-					DrawText( char, font, 0, 0, color_white )
-				else
+			if ( string.find( char, '\n' ) ) then
 
-					surface.SetTextPos( 0, 0 )
-					surface.SetTextColor( 255, 255, 255 )
-					surface.DrawText( char )
+				DrawText( char, font, 0, 0 )
 
-				end
+			else
 
-			cam.End2D()
-
-			-- Access the pixels
-			render.CapturePixels()
-
-			--
-			-- Calculations
-			--
-			do
-
-				local y, stop_y = -1, h - 1
-
-				::find_start_1::
-				y = y + 1
-
-					local x, stop_x = -1, w - 1
-
-					::find_start_2::
-					x = x + 1
-
-						local _, _, _, alpha = ReadPixel( x, y )
-
-						if ( alpha ~= 0 ) then
-
-							iStartY = y
-							goto exit
-
-						end
-
-					if ( x ~= stop_x ) then goto find_start_2 end
-
-				if ( y ~= stop_y ) then goto find_start_1 end
-
-				::exit::
+				surface.SetTextPos( 0, 0 )
+				surface.SetTextColor( 255, 255, 255 )
+				surface.DrawText( char )
 
 			end
 
-			do
+		cam.End2D()
 
-				local y, stop_y = h - 1, 0
+		-- Dump the pixels
+		render.CapturePixels()
 
-				::find_end_1::
-				y = y - 1
+		--
+		-- Calculations
+		--
+		do
 
-					local x, stop_x = -1, w - 1
+			local y, stop_y = -1, h - 1
 
-					::find_end_2::
-					x = x + 1
+			::find_top_vertical::
+			y = y + 1
 
-						local _, _, _, alpha = ReadPixel( x, y )
+				local x, stop_x = -1, w - 1
 
-						if ( alpha ~= 0 ) then
+				::find_top_horizontal::
+				x = x + 1
 
-							iEndY = y
-							goto exit
+					local _, _, _, alpha = ReadPixel( x, y )
 
-						end
+					if ( alpha ~= 0 ) then
 
-					if ( x ~= stop_x ) then goto find_end_2 end
+						yTop = y
+						goto exit
 
-				if ( y ~= stop_y ) then goto find_end_1 end
+					end
 
-				::exit::
+				if ( x ~= stop_x ) then goto find_top_horizontal end
 
-			end
+			if ( y ~= stop_y ) then goto find_top_vertical end
 
-		render.SetScissorRect( 0, 0, 0, 0, false )
-		render.PopRenderTarget()
+			::exit::
 
-	end
+		end
 
-	local visualheight = ( iEndY - iStartY ) + 1
-	local roofheight = iStartY
+		do
 
-	if ( not fontcache[char] ) then
-		fontcache[char] = { visualheight = visualheight; roofheight = roofheight }
+			local y, stop_y = h - 1, 0
+
+			::find_bottom_vertical::
+			y = y - 1
+
+				local x, stop_x = -1, w - 1
+
+				::find_bottom_horizontal::
+				x = x + 1
+
+					local _, _, _, alpha = ReadPixel( x, y )
+
+					if ( alpha ~= 0 ) then
+
+						yBottom = y
+						goto exit
+
+					end
+
+				if ( x ~= stop_x ) then goto find_bottom_horizontal end
+
+			if ( y ~= stop_y ) then goto find_bottom_vertical end
+
+			::exit::
+
+		end
+
+	render.SetScissorRect( 0, 0, 0, 0, false )
+	render.PopRenderTarget()
+
+	local visualheight = ( yBottom - yTop ) + 1
+	local roofheight = yTop
+
+	if ( not vchcache_font[char] ) then
+		vchcache_font[char] = { visualheight = visualheight; roofheight = roofheight }
 	end
 
 	return visualheight, roofheight
